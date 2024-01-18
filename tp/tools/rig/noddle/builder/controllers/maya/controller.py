@@ -11,8 +11,8 @@ import maya.mel as mel
 from tp.common.qt import api as qt
 from tp.common.nodegraph import registers
 from tp.tools.rig.noddle.builder.controllers import abstract
-from tp.libs.rig.noddle.core import control, component, animcomponent, character
-from tp.libs.rig.noddle.maya.io import skin
+from tp.libs.rig.noddle.core import nodes, component, animcomponent, rig
+from tp.libs.rig.noddle.io import skin
 
 
 class MayaNoddleController(abstract.AbstractNoddleController):
@@ -52,7 +52,7 @@ class MayaNoddleController(abstract.AbstractNoddleController):
     def load_data_types(self):
         if not registers.DataType.is_type_registered('CONTROL'):
             registers.DataType.register_data_type(
-                'CONTROL', control.Control, qt.QColor("#2BB12D"), label='Color', default_value=None)
+                'CONTROL', nodes.ControlNode, qt.QColor("#2BB12D"), label='Color', default_value=None)
         if not registers.DataType.is_type_registered('COMPONENT'):
             registers.DataType.register_data_type(
                 'COMPONENT', component.Component, qt.QColor("#6495ED"), label='Component', default_value=None)
@@ -60,9 +60,9 @@ class MayaNoddleController(abstract.AbstractNoddleController):
             registers.DataType.register_data_type(
                 'ANIM_COMPONENT', animcomponent.AnimComponent, qt.QColor("#6495ED"), label='AnimComponent',
                 default_value=None)
-        if not registers.DataType.is_type_registered('CHARACTER'):
+        if not registers.DataType.is_type_registered('RIG'):
             registers.DataType.register_data_type(
-                'CHARACTER', character.Character, qt.QColor("#5767FF"), label='Character', default_value=None)
+                'RIG', rig.Rig, qt.QColor("#5767FF"), label='Character', default_value=None)
 
     @override
     def reference_model(self):

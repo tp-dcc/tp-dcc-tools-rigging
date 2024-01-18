@@ -6,7 +6,7 @@ from typing import Iterable
 from overrides import override
 
 from tp.maya import api
-from tp.libs.rig.noddle.core import component, nodes
+from tp.libs.rig.noddle.core import component
 from tp.libs.rig.noddle.meta import layers, animcomponent as meta_component
 from tp.libs.rig.noddle.descriptors import component as descriptor_component
 from tp.libs.rig.noddle.functions import outliner

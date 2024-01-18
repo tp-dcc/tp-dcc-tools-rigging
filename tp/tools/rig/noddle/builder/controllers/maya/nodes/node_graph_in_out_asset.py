@@ -12,7 +12,7 @@ from tp.common.nodegraph import api
 from tp.common.nodegraph.nodes import node_graph_inout
 
 from tp.libs.rig.noddle.core import asset
-from tp.libs.rig.noddle.maya.functions import assets
+from tp.libs.rig.noddle.functions import assets
 
 logger = log.tpLogger
 

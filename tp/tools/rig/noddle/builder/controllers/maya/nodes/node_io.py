@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from tp.libs.rig.noddle.maya import io
+from tp.libs.rig.noddle import io
 from tp.tools.rig.noddle.builder import api
 
 

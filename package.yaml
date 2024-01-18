@@ -11,7 +11,10 @@ environment:
   TPDCC_BASE_PATHS:
     - '{self}'
   TPDCC_TOOL_DEFINITION_MODULES:
-    - '{self}/tp/tools/rig'
+    - '{self}/tp/tools/rig/jointtoolbox/tool.py'
+    - '{self}/tp/tools/rig/noddle/tool.py'
+    - '{self}/tp/tools/rig/skeletor/tool.py'
+    - '{self}/tp/tools/rig/transferskinweights/tool.py'
   TPDCC_META_PATHS:
     - '{self}/tp/libs/rig/noddle/meta'
   # Noddle

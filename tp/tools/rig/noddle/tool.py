@@ -1,6 +1,7 @@
 from overrides import override
 
 from tp.core import tool
+from tp.common.nodegraph import registers
 
 
 class NoddleBuilderTool(tool.Tool):
@@ -13,8 +14,6 @@ class NoddleBuilderTool(tool.Tool):
     def execute(self, *args, **kwargs):
 
         from tp.tools.rig.noddle.builder import controller, window
-        from tp.common.nodegraph import registers
-
         noddle_controller = controller.NoddleController()
         noddle_controller.load_data_types()
 

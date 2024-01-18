@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import typing
+from functools import partial
 from dataclasses import dataclass
 
 from overrides import override
@@ -34,6 +35,8 @@ class JointToolBox(tool.Tool):
     tags = ['joint', 'toolbox']
 
     alignJoint = qt.Signal(AlignJointEvent)
+    editLra = qt.Signal()
+    exitLra = qt.Signal()
 
     def __init__(self, factory: PluginFactory, tools_manager: ToolsManager):
         super().__init__(factory, tools_manager)
@@ -68,6 +71,8 @@ class JointToolBox(tool.Tool):
             self._hook = hook.JointToolboxHook()
 
         self.alignJoint.connect(self._hook.align_joint)
+        self.editLra.connect(self._hook.edit_lra)
+        self.exitLra.connect(self._hook.exit_lra)
 
     @override
     def contents(self) -> list[qt.QWidget]:
@@ -110,7 +115,21 @@ class JointToolBox(tool.Tool):
             align_to_plane=align_to_plane, primary_axis_vector=primary_axis_vector,
             secondary_axis_vector=secondary_axis_vector, world_up_axis_vector=world_up_axis_vector,
             orient_children=bool(self.properties.affect_children))
-        self._signals.alignJoint.emit(event)
+        self.alignJoint.emit(event)
+
+    def edit_lra(self):
+        """
+        Enters component mode, switch on edit local rotation axis and turns handle visibility on.
+        """
+
+        self.editLra.emit()
+
+    def exit_lra(self):
+        """
+        Exists component mode and turns off local rotation axis.
+        """
+
+        self.exitLra.emit()
 
 
 class JointToolboxView(qt.QWidget):
@@ -119,6 +138,8 @@ class JointToolboxView(qt.QWidget):
 
         self._tool = tool_instance
 
+        self._accordion: qt.AccordionWidget | None = None
+        self._orient_widget: qt.QWidget | None = None
         self._select_radio_widget: qt.RadioButtonGroup | None = None
         self._primary_axis_combo: qt.ComboBoxRegularWidget | None = None
         self._secondary_axis_combo: qt.ComboBoxRegularWidget | None = None
@@ -128,6 +149,11 @@ class JointToolboxView(qt.QWidget):
         self._select_plane_arrow_ctrl_button: qt.LeftAlignedButton | None = None
         self._orient_y_pos_button: qt.LeftAlignedButton | None = None
         self._orient_y_neg_button: qt.LeftAlignedButton | None = None
+        self._edit_lra_button: qt.LeftAlignedButton | None = None
+        self._exit_lra_button: qt.LeftAlignedButton | None = None
+        self._draw_style_widget: qt.QWidget | None = None
+        self._mirror_widget: qt.QWidget | None = None
+        self._size_widget: qt.QWidget | None = None
 
         self.setup_widgets()
         self.setup_layouts()
@@ -149,57 +175,51 @@ class JointToolboxView(qt.QWidget):
         Function that setup widgets.
         """
 
-        radio_names = ['Selected', 'Hierarchy']
-        radio_tooltips = ['Affects only selected joints.', 'Affects selected joints and all of child joints.']
         self._select_radio_widget = qt.RadioButtonGroup(
-            radio_names=radio_names, tooltips=radio_tooltips,
+            radio_names=['Selected', 'Hierarchy'], tooltips=consts.RADIO_TOOLTIPS,
             margins=(qt.consts.SUPER_LARGE_SPACING_2, 0, qt.consts.SUPER_LARGE_SPACING_2, 0),
-            spacing=qt.consts.SUPER_EXTRA_LARGE_SPACING, parent=self)
+            spacing=qt.consts.SUPER_EXTRA_LARGE_SPACING, alignment=qt.Qt.AlignLeft,  parent=self)
 
-        tooltip = 'Set the primary axis, which is the axis that the joints will aim towards their children.'
+        self._accordion = qt.AccordionWidget(parent=self)
+        self._accordion.rollout_style = qt.AccordionStyle.ROUNDED
+
+        self._orient_widget = qt.QWidget(parent=self)
+        self._accordion.add_item('Orient', self._orient_widget)
         self._primary_axis_combo = qt.ComboBoxRegularWidget(
-            label='Aim Axis', items=consts.XYZ_WITH_NEG_LIST, set_index=0, tooltip=tooltip, parent=self)
-
-        tooltip = 'Set the secondary axis, which is the axis the joints roll towards relative to the "World Up" ' \
-                  'settings.\nTo set the roll axis to the negative, press the down button (below).'
+            label='Aim Axis', items=consts.XYZ_WITH_NEG_LIST, set_index=0, tooltip=consts.PRIMARY_AXIS_COMBO_TOOLTIP,
+            parent=self)
         self._secondary_axis_combo = qt.ComboBoxRegularWidget(
-            label='Roll Up', items=consts.XYZ_LIST, set_index=1, tooltip=tooltip, parent=self)
-
-        tooltip = 'The world up axis to use when orienting joints.\n\n' \
-                  '   - X: Up axis points to the side (right) in world coordinates.\n' \
-                  '   - Y: Up axis points to up in world coordinates.\n' \
-                  '   - Z: Up axis points to the front in world coordinates.\n' \
-                  '   - Plane: Builds a plane control for both orient and position snapping.'
+            label='Roll Up', items=consts.XYZ_LIST, set_index=1, tooltip=consts.SECONDARY_AXIS_COMBO_TOOLTIP,
+            parent=self)
         self._world_up_axis_combo = qt.ComboBoxRegularWidget(
-            label='World Up', items=consts.XYZ_LIST + ['Up Ctrl', 'Plane'], set_index=1, tooltip=tooltip, parent=self)
+            label='World Up', items=consts.XYZ_LIST + ['Up Ctrl', 'Plane'], set_index=1,
+            tooltip=consts.WORLD_UP_AXIS_COMBO_TOOLTIP, parent=self)
 
-        tooltip = 'Select a start and end joint to position and orient the plane/arrow control along a joint chain.\n' \
-                  'The automatic start/end positioning should find the most accurate up direction for the joints.\n' \
-                  'Right-click for more options, including setting the plane to a given world axis.'
         self._start_end_arrow_chain_button = qt.left_aligned_button(
-            'Position Ctrl (Right Click)', icon='exit', tooltip=tooltip, parent=self)
+            'Position Ctrl (Right Click)', icon='exit', tooltip=consts.START_END_ARROW_CHAIN_BUTTON_TOOLTIP,
+            parent=self)
         self._start_end_chain_button = qt.left_aligned_button(
-            'Position Ctrl (Right-Click)', icon='plane', tooltip=tooltip, parent=self)
-
-        tooltip = 'Select the "Up Arrow/Plane Control" in the scene.'
+            'Position Ctrl (Right-Click)', icon='plane', tooltip=consts.START_END_ARROW_CHAIN_BUTTON_TOOLTIP,
+            parent=self)
         self._select_plane_arrow_ctrl_button = qt.left_aligned_button(
-            'Select Control', icon='cursor', tooltip=tooltip, parent=self)
-
-        tooltip = 'Orient joints so that the roll axis orient "up" as per the "World Up" setting.\n' \
-                  'The "Aim Axis" will aim toward the child joint, or if None exists, from its parent.\n\n' \
-                  'World Up set to "Up Ctrl": Joint roll will orient in the direction of the arrow control.\n' \
-                  'World Up set to "Plane": Joints will both orient and position-snap to the plane control.\n\n' \
-                  'Select joints to orient (and or position) and run.'
+            'Select Control', icon='cursor', tooltip=consts.SELECT_PLANE_ARROW_CONTROL_BUTTON_TOOLTIP, parent=self)
         self._orient_y_pos_button = qt.left_aligned_button(
-            'Orient Roll +Y (Aim X)', icon='arrow_up', tooltip=tooltip, parent=self)
-
-        tooltip = 'Orient joints so that the roll axis orient "down" as per the "World Up" setting.\n' \
-                  'The "Aim Axis" will aim toward the child joint, or if None exists, from its parent.\n\n' \
-                  'World Up set to "Up Ctrl": Joint roll will orient in the direction of the arrow control.\n' \
-                  'World Up set to "Plane": Joints will both orient and position-snap to the plane control.\n\n' \
-                  'Select joints to orient (and or position) and run.'
+            'Orient Roll +Y (Aim X)', icon='arrow_up', tooltip=consts.ORIENT_Y_POSITIVE_BUTTON_TOOLTIP, parent=self)
         self._orient_y_neg_button = qt.left_aligned_button(
-            'Orient Roll -Y (Aim X)', icon='arrow_down', tooltip=tooltip, parent=self)
+            'Orient Roll -Y (Aim X)', icon='arrow_down', tooltip=consts.ORIENT_Y_NEGATIVE_BUTTON_TOOLTIP, parent=self)
+        self._edit_lra_button = qt.left_aligned_button(
+            'Edit LRA', icon='edit', tooltip=consts.EDIT_LRA_BUTTON_TOOLTIP, parent=self)
+        self._exit_lra_button = qt.left_aligned_button(
+            'Exit LRA', icon='exit', tooltip=consts.EXIT_LRA_BUTTON_TOOLTIP, parent=self)
+
+        self._draw_style_widget = qt.QWidget(parent=self)
+        self._accordion.add_item('Draw Style', self._draw_style_widget)
+
+        self._mirror_widget = qt.QWidget(parent=self)
+        self._accordion.add_item('Mirror', self._mirror_widget)
+
+        self._size_widget = qt.QWidget(parent=self)
+        self._accordion.add_item('Size', self._size_widget)
 
     def setup_layouts(self):
         """
@@ -213,28 +233,40 @@ class JointToolboxView(qt.QWidget):
             spacing=qt.consts.SPACING, parent=self)
         self.setLayout(contents_layout)
 
+        orient_main_layout = qt.vertical_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
+        self._orient_widget.setLayout(orient_main_layout)
         axis_layout = qt.horizontal_layout(
             margins=(qt.consts.SMALL_SPACING, qt.consts.SMALL_SPACING, qt.consts.SMALL_SPACING, 0),
             spacing=qt.consts.SUPER_EXTRA_LARGE_SPACING)
         axis_layout.addWidget(self._primary_axis_combo, 5)
         axis_layout.addWidget(self._secondary_axis_combo, 5)
         axis_layout.addWidget(self._world_up_axis_combo, 5)
-
         control_layout = qt.horizontal_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
         control_layout.addWidget(self._start_end_arrow_chain_button)
         control_layout.addWidget(self._start_end_chain_button)
         control_layout.addWidget(self._select_plane_arrow_ctrl_button)
-
         orient_layout = qt.horizontal_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
         orient_layout.addWidget(self._orient_y_pos_button)
         orient_layout.addWidget(self._orient_y_neg_button)
+        edit_lra_layout = qt.horizontal_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
+        edit_lra_layout.addWidget(self._edit_lra_button)
+        edit_lra_layout.addWidget(self._exit_lra_button)
+        orient_main_layout.addLayout(axis_layout)
+        orient_main_layout.addLayout(control_layout)
+        orient_main_layout.addLayout(orient_layout)
+        orient_main_layout.addLayout(edit_lra_layout)
+
+        draw_style_layout = qt.vertical_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
+        self._draw_style_widget.setLayout(draw_style_layout)
+
+        mirror_layout = qt.vertical_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
+        self._mirror_widget.setLayout(mirror_layout)
+
+        size_layout = qt.vertical_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
+        self._size_widget.setLayout(size_layout)
 
         contents_layout.addWidget(self._select_radio_widget)
-        contents_layout.addLayout(axis_layout)
-        contents_layout.addLayout(control_layout)
-        contents_layout.addLayout(orient_layout)
-
-        contents_layout.addStretch()
+        contents_layout.addWidget(self._accordion)
 
     def link_properties(self):
         """
@@ -252,7 +284,10 @@ class JointToolboxView(qt.QWidget):
         """
 
         self._primary_axis_combo.currentIndexChanged.connect(self._on_primary_axis_combo_current_index_changed)
-        self._orient_y_pos_button.clicked.connect(self.tool.align_joint)
+        self._orient_y_pos_button.clicked.connect(partial(self.tool.align_joint, align_up=True))
+        self._orient_y_neg_button.clicked.connect(partial(self.tool.align_joint, align_up=False))
+        self._edit_lra_button.clicked.connect(self.tool.edit_lra)
+        self._exit_lra_button.clicked.connect(self.tool.exit_lra)
 
     def _on_primary_axis_combo_current_index_changed(self):
         """

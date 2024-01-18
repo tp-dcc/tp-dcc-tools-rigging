@@ -19,3 +19,19 @@ class JointToolboxHook:
         """
 
         raise NotImplementedError
+
+    @decorators.abstractmethod
+    def edit_lra(self):
+        """
+        Enters component mode, switch on edit local rotation axis and turns handle visibility on.
+        """
+
+        raise NotImplementedError
+
+    @decorators.abstractmethod
+    def exit_lra(self):
+        """
+        Exists component mode and turns off local rotation axis.
+        """
+
+        raise NotImplementedError
