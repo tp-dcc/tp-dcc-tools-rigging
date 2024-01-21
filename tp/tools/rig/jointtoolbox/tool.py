@@ -18,12 +18,17 @@ if typing.TYPE_CHECKING:
 logger = log.rigLogger
 
 
-@dataclass()
+@dataclass
 class AlignJointEvent:
     align_to_plane: bool
     primary_axis_vector: tuple[float, float, float]
     secondary_axis_vector: tuple[float, float, float]
     world_up_axis_vector: tuple[float, float, float]
+    orient_children: bool
+
+
+@dataclass
+class ZeroRotationAxisEvent:
     orient_children: bool
 
 
@@ -37,6 +42,8 @@ class JointToolBox(tool.Tool):
     alignJoint = qt.Signal(AlignJointEvent)
     editLra = qt.Signal()
     exitLra = qt.Signal()
+    alignToParent = qt.Signal()
+    zeroRotationAxis = qt.Signal(ZeroRotationAxisEvent)
 
     def __init__(self, factory: PluginFactory, tools_manager: ToolsManager):
         super().__init__(factory, tools_manager)
@@ -73,6 +80,8 @@ class JointToolBox(tool.Tool):
         self.alignJoint.connect(self._hook.align_joint)
         self.editLra.connect(self._hook.edit_lra)
         self.exitLra.connect(self._hook.exit_lra)
+        self.alignToParent.connect(self._hook.align_to_parent)
+        self.zeroRotationAxis.connect(self._hook.zero_rotation_axis)
 
     @override
     def contents(self) -> list[qt.QWidget]:
@@ -131,6 +140,21 @@ class JointToolBox(tool.Tool):
 
         self.exitLra.emit()
 
+    def align_to_parent(self):
+        """
+        Aligns selected joint to its parent.
+        """
+
+        self.alignToParent.emit()
+
+    def zero_rotation_axis(self):
+        """
+        Zeroes out the rotation of axis of the selected joints.
+        """
+
+        event = ZeroRotationAxisEvent(orient_children=bool(self.properties.affect_children))
+        self.zeroRotationAxis.emit(event)
+
 
 class JointToolboxView(qt.QWidget):
     def __init__(self, tool_instance: JointToolBox, parent: qt.QWidget | None = None):
@@ -151,6 +175,7 @@ class JointToolboxView(qt.QWidget):
         self._orient_y_neg_button: qt.LeftAlignedButton | None = None
         self._edit_lra_button: qt.LeftAlignedButton | None = None
         self._exit_lra_button: qt.LeftAlignedButton | None = None
+        self._align_parent_button: qt.LeftAlignedButton | None = None
         self._draw_style_widget: qt.QWidget | None = None
         self._mirror_widget: qt.QWidget | None = None
         self._size_widget: qt.QWidget | None = None
@@ -211,6 +236,10 @@ class JointToolboxView(qt.QWidget):
             'Edit LRA', icon='edit', tooltip=consts.EDIT_LRA_BUTTON_TOOLTIP, parent=self)
         self._exit_lra_button = qt.left_aligned_button(
             'Exit LRA', icon='exit', tooltip=consts.EXIT_LRA_BUTTON_TOOLTIP, parent=self)
+        self._align_parent_button = qt.left_aligned_button(
+            'Align To Parent', icon='manipulator', tooltip=consts.ALIGN_PARENT_BUTTON_TOOLTIP, parent=self)
+        self._zero_rotation_axis_button = qt.left_aligned_button(
+            'Zero Rotation Axis', icon='check', tooltip=consts.ZERO_ROTATION_AXIS_BUTTON_TOOLTIP, parent=self)
 
         self._draw_style_widget = qt.QWidget(parent=self)
         self._accordion.add_item('Draw Style', self._draw_style_widget)
@@ -251,10 +280,14 @@ class JointToolboxView(qt.QWidget):
         edit_lra_layout = qt.horizontal_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
         edit_lra_layout.addWidget(self._edit_lra_button)
         edit_lra_layout.addWidget(self._exit_lra_button)
+        zero_parent_layout = qt.horizontal_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
+        zero_parent_layout.addWidget(self._align_parent_button)
+        zero_parent_layout.addWidget(self._zero_rotation_axis_button)
         orient_main_layout.addLayout(axis_layout)
         orient_main_layout.addLayout(control_layout)
         orient_main_layout.addLayout(orient_layout)
         orient_main_layout.addLayout(edit_lra_layout)
+        orient_main_layout.addLayout(zero_parent_layout)
 
         draw_style_layout = qt.vertical_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
         self._draw_style_widget.setLayout(draw_style_layout)
@@ -288,6 +321,8 @@ class JointToolboxView(qt.QWidget):
         self._orient_y_neg_button.clicked.connect(partial(self.tool.align_joint, align_up=False))
         self._edit_lra_button.clicked.connect(self.tool.edit_lra)
         self._exit_lra_button.clicked.connect(self.tool.exit_lra)
+        self._align_parent_button.clicked.connect(self.tool.align_to_parent)
+        self._zero_rotation_axis_button.clicked.connect(self.tool.zero_rotation_axis)
 
     def _on_primary_axis_combo_current_index_changed(self):
         """

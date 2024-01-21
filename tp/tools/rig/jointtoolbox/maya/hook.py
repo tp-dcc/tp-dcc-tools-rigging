@@ -8,7 +8,7 @@ from tp.tools.rig.jointtoolbox import hook
 from tp.libs.rig.jointtolbox.maya import api
 
 if typing.TYPE_CHECKING:
-    from tp.tools.rig.jointtoolbox.tool import AlignJointEvent
+    from tp.tools.rig.jointtoolbox.tool import AlignJointEvent, ZeroRotationAxisEvent
 
 
 class MayaJointToolbox(hook.JointToolboxHook):
@@ -43,3 +43,21 @@ class MayaJointToolbox(hook.JointToolboxHook):
         """
 
         joints.edit_component_lra(False)
+
+    @decorators.undo
+    def align_to_parent(self):
+        """
+        Aligns selected joint to its parent.
+        """
+
+        joints.align_selected_joints_to_parent()
+
+    @decorators.undo
+    def zero_rotation_axis(self, event: ZeroRotationAxisEvent):
+        """
+        Zeroes out the rotation axis of the selected joints.
+
+        :param ZeroRotationAxisEvent event: zero rotation axis event.
+        """
+
+        joints.zero_selected_joints_rotation_axis(zero_children=event.orient_children)

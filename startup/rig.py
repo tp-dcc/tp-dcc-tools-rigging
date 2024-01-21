@@ -26,7 +26,7 @@ def startup(_: package.Package):
     # Make sure QApplication instance exists before registering resources
     app = QApplication.instance() or QApplication(sys.argv)
     resources_path = os.path.join(os.path.dirname(root_path), 'resources')
-    resources.register_resource(resources_path, key='tp-dcc-tools-rig-noddle')
+    resources.register_resource(resources_path, key='tp-dcc-tools-rigging')
 
     # Update Noddle preferences
     noddle_interface = noddle.noddle_interface()

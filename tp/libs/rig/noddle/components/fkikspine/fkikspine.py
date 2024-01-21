@@ -106,7 +106,6 @@ class FkIkSpineComponent(animcomponent.AnimComponent):
 
     @override(check_signature=False)
     def setup_rig(self, parent_node: nodes.Joint | api.DagNode | None = None):
-
         component_name, component_side = self.name(), self.side()
         naming = self.naming_manager()
         skeleton_layer_descriptor = self.descriptor.skeleton_layer
@@ -144,25 +143,25 @@ class FkIkSpineComponent(animcomponent.AnimComponent):
             id='hips', shape='circle_down_arrow', not_locked_attributes='tr', color=self.color(),
             guide=control_joints[0], delete_guide=False, parent=root_control)
         rig_layer.create_srt_buffer('hips', '_'.join([hips_control.name(False), 'srt']))
-        #
-        # control_locator.setTranslation(api.Vector(*cmds.pointOnCurve(ik_curve.fullPathName(), pr=0.5, top=True)))
-        # mid_control = rig_layer.create_control(
-        #     name=naming.resolve(
-        #         'controlName',
-        #         {'componentName': component_name, 'side': component_side, 'id': 'mid', 'type': 'control'}),
-        #     id='mid', shape='circle_up_arrow', not_locked_attributes='tr', color=self.color(), orient_axis=up_axis,
-        #     guide=control_locator, delete_guide=False, parent=root_control)
-        # cmds.matchTransform(
-        #     mid_control.fullPathName(), control_joints[0].fullPathName(), pos=False, rot=True, piv=False)
-        # rig_layer.create_srt_buffer('mid', '_'.join([mid_control.name(False), 'srt']))
-        #
-        # chest_control = rig_layer.create_control(
-        #     name=naming.resolve(
-        #         'controlName',
-        #         {'componentName': component_name, 'side': component_side, 'id': 'chest', 'type': 'control'}),
-        #     id='chest', shape='chest', not_locked_attributes='tr', color=self.color(), orient_axis=up_axis,
-        #     guide=control_joints[-1], delete_guide=False, parent=root_control)
-        # rig_layer.create_srt_buffer('chest', '_'.join([chest_control.name(False), 'srt']))
+
+        control_locator.setTranslation(api.Vector(*cmds.pointOnCurve(ik_curve.fullPathName(), pr=0.5, top=True)))
+        mid_control = rig_layer.create_control(
+            name=naming.resolve(
+                'controlName',
+                {'componentName': component_name, 'side': component_side, 'id': 'mid', 'type': 'control'}),
+            id='mid', shape='circle_up_arrow', not_locked_attributes='tr', color=self.color(), orient_axis=up_axis,
+            guide=control_locator, delete_guide=False, parent=root_control)
+        cmds.matchTransform(
+            mid_control.fullPathName(), control_joints[0].fullPathName(), pos=False, rot=True, piv=False)
+        rig_layer.create_srt_buffer('mid', '_'.join([mid_control.name(False), 'srt']))
+
+        chest_control = rig_layer.create_control(
+            name=naming.resolve(
+                'controlName',
+                {'componentName': component_name, 'side': component_side, 'id': 'chest', 'type': 'control'}),
+            id='chest', shape='chest', not_locked_attributes='tr', color=self.color(), orient_axis=up_axis,
+            guide=control_joints[-1], delete_guide=False, parent=root_control)
+        rig_layer.create_srt_buffer('chest', '_'.join([chest_control.name(False), 'srt']))
         # cmds.delete(cmds.orientConstraint(
         #     chest_control.srt(0).fullPathName(), hips_control.srt(0).fullPathName(), mid_control.srt(0).fullPathName()))
         # cns, constraint_nodes = api.build_constraint(
@@ -265,8 +264,8 @@ class FkIkSpineComponent(animcomponent.AnimComponent):
         scale_dict = {
             root_control: 0.4,
             hips_control: 0.35,
-            # mid_control: 0.3,
-            # chest_control: 0.30,
+            mid_control: 0.3,
+            chest_control: 0.30,
         #     fk1_control: 0.35,
         #     fk2_control: 0.35
         }

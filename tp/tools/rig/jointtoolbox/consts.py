@@ -51,3 +51,10 @@ Enter component mode and make the local rotation axis selectable, so that manipu
 EXIT_LRA_BUTTON_TOOLTIP = """
 Exit component mode into object mode and turns off the local rotation axis selectability.
 Note: To b safe always run Zero Rotation Axis after existing LRA mode."""
+ALIGN_PARENT_BUTTON_TOOLTIP = """
+Align selected joint to its parent.
+Useful for end joints that have no children to orient towards"""
+ZERO_ROTATION_AXIS_BUTTON_TOOLTIP = """
+After manually re-orienting a joint LRA, this button allows zero out joints rotation axis attributes.
+This will keep the joint orientation predictable.
+Note: This button should be pressed after exiting LRA mode if modifications have been made."""

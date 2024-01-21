@@ -147,14 +147,14 @@ class FkSpineComponent(animcomponent.AnimComponent):
             fk_control = rig_layer.create_control(
                 name=control_name, id=fk_control_id, shape='circle_up_arrow',
                 translate=joint_descriptor.translate, rotate=joint_descriptor.rotate,
-                rotateOrder=joint_descriptor.rotateOrder, color=[0.0, 1.0, 0.0], orient_axis='x',
+                rotateOrder=joint_descriptor.rotateOrder, color=[0.0, 1.0, 0.0], orient_axis='y',
                 selection_child_highlighting=self.configuration.selection_child_highlighting,
                 parent=control_parent, srts=[{'id': joint_descriptor.id, 'name': '_'.join([control_name, 'srt'])}])
-            fk_control.rotate_shape((180.0, 0.0, 0.0))
+        #     fk_control.rotate_shape((180.0, 0.0, 0.0))
             created_fk_controls[joint_descriptor.id] = fk_control
-
-        visibility_switch_plug = control_panel.attribute('cogGimbalVis')
-
+        #
+        # visibility_switch_plug = control_panel.attribute('cogGimbalVis')
+        #
         scale_dict = {
             cog_control: 0.5,
             gimbal_control: 0.4,
@@ -164,7 +164,7 @@ class FkSpineComponent(animcomponent.AnimComponent):
             scale_dict[fk_control] = 0.35
         self.scale_controls(scale_dict)
 
-        hips_control.move_shapes(api.Vector(0.0, -6.0, 0.0))
+        # hips_control.move_shapes(api.Vector(0.0, -6.0, 0.0))
 
     def post_setup_rig(self, parent_node: nodes.Joint | api.DagNode | None = None):
         super().post_setup_rig(parent_node=parent_node)
