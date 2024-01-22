@@ -8,7 +8,7 @@ from tp.tools.rig.jointtoolbox import hook
 from tp.libs.rig.jointtolbox.maya import api
 
 if typing.TYPE_CHECKING:
-    from tp.tools.rig.jointtoolbox.tool import AlignJointEvent, ZeroRotationAxisEvent
+    from tp.tools.rig.jointtoolbox.tool import AlignJointEvent, ZeroRotationAxisEvent, RotateLraEvent
 
 
 class MayaJointToolbox(hook.JointToolboxHook):
@@ -61,3 +61,13 @@ class MayaJointToolbox(hook.JointToolboxHook):
         """
 
         joints.zero_selected_joints_rotation_axis(zero_children=event.orient_children)
+
+    @decorators.undo
+    def rotate_lra(self, event: RotateLraEvent):
+        """
+        Rotates Local Rotate Axis of the selected joints.
+
+        :param RotateLraEvent event: rotate local rotation axis event.
+        """
+
+        joints.rotate_selected_joints_local_rotation_axis(event.lra_rotation, include_children=event.orient_children)

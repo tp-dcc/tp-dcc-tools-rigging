@@ -5,7 +5,7 @@ import typing
 from tp.common.python import decorators
 
 if typing.TYPE_CHECKING:
-    from tp.tools.rig.jointtoolbox.tool import AlignJointEvent, ZeroRotationAxisEvent
+    from tp.tools.rig.jointtoolbox.tool import AlignJointEvent, ZeroRotationAxisEvent, RotateLraEvent
 
 
 class JointToolboxHook:
@@ -50,6 +50,16 @@ class JointToolboxHook:
         Zeroes out the rotation axis of the selected joints.
         
         :param ZeroRotationAxisEvent event: zero rotation axis event.
+        """
+
+        raise NotImplementedError
+
+    @decorators.abstractmethod
+    def rotate_lra(self, event: RotateLraEvent):
+        """
+        Rotates Local Rotate Axis of the selected joints.
+
+        :param RotateLraEvent event: rotate local rotation axis event.
         """
 
         raise NotImplementedError

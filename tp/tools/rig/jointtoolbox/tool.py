@@ -32,6 +32,12 @@ class ZeroRotationAxisEvent:
     orient_children: bool
 
 
+@dataclass
+class RotateLraEvent:
+    lra_rotation: list[float, float, float]
+    orient_children: bool
+
+
 class JointToolBox(tool.Tool):
 
     id = consts.TOOL_ID
@@ -44,6 +50,7 @@ class JointToolBox(tool.Tool):
     exitLra = qt.Signal()
     alignToParent = qt.Signal()
     zeroRotationAxis = qt.Signal(ZeroRotationAxisEvent)
+    rotateLra = qt.Signal(RotateLraEvent)
 
     def __init__(self, factory: PluginFactory, tools_manager: ToolsManager):
         super().__init__(factory, tools_manager)
@@ -59,8 +66,8 @@ class JointToolBox(tool.Tool):
             tool.UiProperty(name='global_display_size', value=1),
             tool.UiProperty(name='joint_radius', value=1.0),
             tool.UiProperty(name='mirror', value=0),
-            tool.UiProperty(name='rotate', value=0),
-            tool.UiProperty(name='rotate_lra', value=0),
+            tool.UiProperty(name='rotate_lra_axis', value=0),
+            tool.UiProperty(name='rotate_lra', value=45.0),
             tool.UiProperty(name='world_up', value=1),
             tool.UiProperty(name='primary_axis', value=0),
             tool.UiProperty(name='secondary_axis', value=1),
@@ -82,6 +89,7 @@ class JointToolBox(tool.Tool):
         self.exitLra.connect(self._hook.exit_lra)
         self.alignToParent.connect(self._hook.align_to_parent)
         self.zeroRotationAxis.connect(self._hook.zero_rotation_axis)
+        self.rotateLra.connect(self._hook.rotate_lra)
 
     @override
     def contents(self) -> list[qt.QWidget]:
@@ -152,8 +160,37 @@ class JointToolBox(tool.Tool):
         Zeroes out the rotation of axis of the selected joints.
         """
 
-        event = ZeroRotationAxisEvent(orient_children=bool(self.properties.affect_children))
+        event = ZeroRotationAxisEvent(orient_children=bool(self.properties.affect_children.value))
         self.zeroRotationAxis.emit(event)
+
+    def rotate_lra(self, negative: bool = False):
+        """
+        Rotate Local Rotation Axis of selected joints.
+
+        :param bool negative: whether to rotate lra in negative value.
+        """
+
+        modifiers = qt.QApplication.keyboardModifiers()
+        multiplier = 2.0 if modifiers == qt.Qt.ShiftModifier else 0.5 if modifiers == qt.Qt.ControlModifier else 1.0
+
+        lra_rotate_value = self.properties.rotate_lra.value * multiplier
+        lra_rotate_value = -lra_rotate_value if negative else lra_rotate_value
+        if self.properties.rotate_lra_axis == 0:
+            lra_rotation = [lra_rotate_value, 0.0, 0.0]
+        elif self.properties.rotate_lra_axis == 1:
+            lra_rotation = [0.0, lra_rotate_value, 0.0]
+        else:
+            lra_rotation = [0.0, 0.0, lra_rotate_value]
+        event = RotateLraEvent(lra_rotation=lra_rotation, orient_children=bool(self.properties.affect_children.value))
+
+        self.rotateLra.emit(event)
+
+    def reset_ui(self):
+        """
+        Resets UI state.
+        """
+
+        self.reset_properties(update_widgets=True)
 
 
 class JointToolboxView(qt.QWidget):
@@ -165,6 +202,7 @@ class JointToolboxView(qt.QWidget):
         self._accordion: qt.AccordionWidget | None = None
         self._orient_widget: qt.QWidget | None = None
         self._select_radio_widget: qt.RadioButtonGroup | None = None
+        self._reset_ui_button: qt.BaseButton | None = None
         self._primary_axis_combo: qt.ComboBoxRegularWidget | None = None
         self._secondary_axis_combo: qt.ComboBoxRegularWidget | None = None
         self._world_up_axis_combo: qt.ComboBoxRegularWidget | None = None
@@ -176,6 +214,11 @@ class JointToolboxView(qt.QWidget):
         self._edit_lra_button: qt.LeftAlignedButton | None = None
         self._exit_lra_button: qt.LeftAlignedButton | None = None
         self._align_parent_button: qt.LeftAlignedButton | None = None
+        self._zero_rotation_axis_button: qt.LeftAlignedButton | None = None
+        self._rotate_axis_lra_combo: qt.ComboBoxRegularWidget | None = None
+        self._rotate_lra_line: qt.FloatLineEditWidget | None = None
+        self._rotate_lra_negative_button: qt.BaseButton | None = None
+        self._rotate_lra_positive_button: qt.BaseButton | None = None
         self._draw_style_widget: qt.QWidget | None = None
         self._mirror_widget: qt.QWidget | None = None
         self._size_widget: qt.QWidget | None = None
@@ -204,6 +247,9 @@ class JointToolboxView(qt.QWidget):
             radio_names=['Selected', 'Hierarchy'], tooltips=consts.RADIO_TOOLTIPS,
             margins=(qt.consts.SUPER_LARGE_SPACING_2, 0, qt.consts.SUPER_LARGE_SPACING_2, 0),
             spacing=qt.consts.SUPER_EXTRA_LARGE_SPACING, alignment=qt.Qt.AlignLeft,  parent=self)
+        self._reset_ui_button = qt.styled_button(
+            '', icon='refresh', min_width=qt.consts.BUTTON_WIDTH_ICON_MEDIUM, tooltip=consts.RESET_UI_BUTTON_TOOLTIP,
+            parent=self)
 
         self._accordion = qt.AccordionWidget(parent=self)
         self._accordion.rollout_style = qt.AccordionStyle.ROUNDED
@@ -240,6 +286,16 @@ class JointToolboxView(qt.QWidget):
             'Align To Parent', icon='manipulator', tooltip=consts.ALIGN_PARENT_BUTTON_TOOLTIP, parent=self)
         self._zero_rotation_axis_button = qt.left_aligned_button(
             'Zero Rotation Axis', icon='check', tooltip=consts.ZERO_ROTATION_AXIS_BUTTON_TOOLTIP, parent=self)
+        self._rotate_axis_lra_combo = qt.ComboBoxRegularWidget(
+            'Rotation Axis', items=consts.XYZ_LIST, tooltip=consts.ROTATE_COMBO_TOOLTIP, parent=self)
+        self._rotate_lra_line = qt.FloatLineEditWidget(
+            label='', text=self.tool.properties.rotate_lra.value, tooltip=consts.ROTATE_LRA_TOOLTIP, parent=self)
+        self._rotate_lra_negative_button = qt.styled_button(
+            '', icon='arrow_rotation_left', min_width=qt.consts.BUTTON_WIDTH_ICON_MEDIUM,
+            tooltip=consts.ROTATE_LRA_BUTTON_TOOLTIP, parent=self)
+        self._rotate_lra_positive_button = qt.styled_button(
+            '', icon='arrow_rotation_right', min_width=qt.consts.BUTTON_WIDTH_ICON_MEDIUM,
+            tooltip=consts.ROTATE_LRA_BUTTON_TOOLTIP, parent=self)
 
         self._draw_style_widget = qt.QWidget(parent=self)
         self._accordion.add_item('Draw Style', self._draw_style_widget)
@@ -262,6 +318,11 @@ class JointToolboxView(qt.QWidget):
             spacing=qt.consts.SPACING, parent=self)
         self.setLayout(contents_layout)
 
+        select_layout = qt.horizontal_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
+        select_layout.addWidget(self._select_radio_widget)
+        select_layout.addStretch()
+        select_layout.addWidget(self._reset_ui_button)
+
         orient_main_layout = qt.vertical_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
         self._orient_widget.setLayout(orient_main_layout)
         axis_layout = qt.horizontal_layout(
@@ -283,11 +344,20 @@ class JointToolboxView(qt.QWidget):
         zero_parent_layout = qt.horizontal_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
         zero_parent_layout.addWidget(self._align_parent_button)
         zero_parent_layout.addWidget(self._zero_rotation_axis_button)
+        rotate_layout = qt.horizontal_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
+        rotate_layout.addWidget(self._rotate_axis_lra_combo)
+        rotate_layout.addWidget(self._rotate_lra_line)
+        rotate_buttons_layout = qt.horizontal_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
+        rotate_buttons_layout.addWidget(self._rotate_lra_negative_button)
+        rotate_buttons_layout.addWidget(self._rotate_lra_positive_button)
+        rotate_layout.addLayout(rotate_buttons_layout)
+
         orient_main_layout.addLayout(axis_layout)
         orient_main_layout.addLayout(control_layout)
         orient_main_layout.addLayout(orient_layout)
         orient_main_layout.addLayout(edit_lra_layout)
         orient_main_layout.addLayout(zero_parent_layout)
+        orient_main_layout.addLayout(rotate_layout)
 
         draw_style_layout = qt.vertical_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
         self._draw_style_widget.setLayout(draw_style_layout)
@@ -298,7 +368,7 @@ class JointToolboxView(qt.QWidget):
         size_layout = qt.vertical_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
         self._size_widget.setLayout(size_layout)
 
-        contents_layout.addWidget(self._select_radio_widget)
+        contents_layout.addLayout(select_layout)
         contents_layout.addWidget(self._accordion)
 
     def link_properties(self):
@@ -310,6 +380,8 @@ class JointToolboxView(qt.QWidget):
         self.tool.link_property(self._primary_axis_combo, 'primary_axis')
         self.tool.link_property(self._secondary_axis_combo, 'secondary_axis')
         self.tool.link_property(self._world_up_axis_combo, 'world_up')
+        self.tool.link_property(self._rotate_axis_lra_combo, 'rotate_lra_axis')
+        self.tool.link_property(self._rotate_lra_line, 'rotate_lra')
 
     def setup_signals(self):
         """
@@ -323,6 +395,9 @@ class JointToolboxView(qt.QWidget):
         self._exit_lra_button.clicked.connect(self.tool.exit_lra)
         self._align_parent_button.clicked.connect(self.tool.align_to_parent)
         self._zero_rotation_axis_button.clicked.connect(self.tool.zero_rotation_axis)
+        self._rotate_lra_negative_button.clicked.connect(partial(self.tool.rotate_lra, negative=True))
+        self._rotate_lra_positive_button.clicked.connect(partial(self.tool.rotate_lra, negative=False))
+        self._reset_ui_button.clicked.connect(self.tool.reset_ui)
 
     def _on_primary_axis_combo_current_index_changed(self):
         """

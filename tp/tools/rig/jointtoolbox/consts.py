@@ -58,3 +58,16 @@ ZERO_ROTATION_AXIS_BUTTON_TOOLTIP = """
 After manually re-orienting a joint LRA, this button allows zero out joints rotation axis attributes.
 This will keep the joint orientation predictable.
 Note: This button should be pressed after exiting LRA mode if modifications have been made."""
+ROTATE_COMBO_TOOLTIP = """
+Rotate around the selected axis ("X", "Y", "Z')."""
+ROTATE_LRA_TOOLTIP = """
+Rotate the local rotation axis by this angle (in degrees)."""
+ROTATE_LRA_BUTTON_TOOLTIP = """
+Rotates the local rotation `roll axis` in degrees.
+
+    - Slow (Ctrl + Left Click): 22.5 degrees.
+    - Medium (Left Click): 45 degrees.
+    - Fast (Shift + Left Click): 09 degrees.
+"""
+RESET_UI_BUTTON_TOOLTIP = """
+Resets th `Orient UI Elements` to the default values."""
