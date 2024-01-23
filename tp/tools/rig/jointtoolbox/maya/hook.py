@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import typing
 
+from tp.core import log
 from tp.maya.cmds import decorators
 from tp.maya.cmds.nodes import joints
-from tp.tools.rig.jointtoolbox import hook
+from tp.tools.rig.jointtoolbox import consts, hook
 from tp.libs.rig.jointtolbox.maya import api
 
 if typing.TYPE_CHECKING:
-    from tp.tools.rig.jointtoolbox.tool import AlignJointEvent, ZeroRotationAxisEvent, RotateLraEvent
+    from tp.tools.rig.jointtoolbox.tool import (
+        AlignJointEvent, ZeroRotationAxisEvent, RotateLraEvent, SetJointDrawModeEvent
+    )
+
+logger = log.rigLogger
 
 
 class MayaJointToolbox(hook.JointToolboxHook):
@@ -71,3 +76,22 @@ class MayaJointToolbox(hook.JointToolboxHook):
         """
 
         joints.rotate_selected_joints_local_rotation_axis(event.lra_rotation, include_children=event.orient_children)
+
+    @decorators.undo
+    def set_draw_joint_mode(self, event: SetJointDrawModeEvent):
+        """
+        Sets the draw joint mode of the selected joints.
+
+        :param SetJointDrawModeEvent event: set joint draw mode event.
+        """
+
+        if event.mode == consts.JointDrawMode.Bone:
+            joints.set_selected_joints_draw_style_to_bone(children=event.affect_children)
+        elif event.mode == consts.JointDrawMode.Hide:
+            joints.set_selected_joints_draw_style_to_none(children=event.affect_children)
+        elif event.mode == consts.JointDrawMode.Joint:
+            joints.set_selected_joints_draw_style_to_joint(children=event.affect_children)
+        elif event.mode == consts.JointDrawMode.MultiBoxChild:
+            joints.set_selected_joints_draw_style_to_multi_box(children=event.affect_children)
+        else:
+            logger.warning(f'Draw mode "{event.mode.value}" is not supported!')

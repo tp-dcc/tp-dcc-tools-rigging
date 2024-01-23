@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import enum
+
 TOOL_ID = 'tp.rig.jointtoolbox'
 
 XYZ_LIST = ['X', 'Y', 'Z']
@@ -12,6 +14,14 @@ AXIS_VECTORS = [
     (0.0, -1.0, 0.0),   # -Y
     (0.0, 0.0, -1.0)    # -Z
 ]
+
+
+class JointDrawMode(enum.Enum):
+    Bone = enum.auto()
+    Hide = enum.auto()
+    Joint = enum.auto()
+    MultiBoxChild = enum.auto()
+
 
 RADIO_TOOLTIPS = ['Affects only selected joints.', 'Affects selected joints and all of child joints.']
 PRIMARY_AXIS_COMBO_TOOLTIP = 'Set the primary axis, which is the axis that the joints will aim towards their children.'
@@ -71,3 +81,15 @@ Rotates the local rotation `roll axis` in degrees.
 """
 RESET_UI_BUTTON_TOOLTIP = """
 Resets th `Orient UI Elements` to the default values."""
+DRAW_BONE_BUTTON_TOOLTIP = """
+Set 'Draw Style' joint attribute to be 'Bone', which is the default mode.
+Joints will be visualized with bones and lines connecting if a hierarchy."""
+DRAW_NONE_BUTTON_TOOLTIP = """
+Set 'Draw Style' joint attribute to be 'None'.
+Joints become hidden no matter the visibility settings."""
+DRAW_JOINT_BUTTON_TOOLTIP = """
+Set 'Draw Style' joint attribute to be 'Joint'.
+Joints will be visualized with no connections between joints."""
+DRAW_MULTI_CHILD_BOX_BUTTON_TOOLTIP = """
+Set 'Draw Style' joint attribute to be 'Multi-Child Box'.
+Joints with multiple children will be visualized as `boxes`, otherwise as `bones`."""

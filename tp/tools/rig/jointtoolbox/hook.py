@@ -5,7 +5,9 @@ import typing
 from tp.common.python import decorators
 
 if typing.TYPE_CHECKING:
-    from tp.tools.rig.jointtoolbox.tool import AlignJointEvent, ZeroRotationAxisEvent, RotateLraEvent
+    from tp.tools.rig.jointtoolbox.tool import (
+        AlignJointEvent, ZeroRotationAxisEvent, RotateLraEvent, SetJointDrawModeEvent
+    )
 
 
 class JointToolboxHook:
@@ -60,6 +62,16 @@ class JointToolboxHook:
         Rotates Local Rotate Axis of the selected joints.
 
         :param RotateLraEvent event: rotate local rotation axis event.
+        """
+
+        raise NotImplementedError
+
+    @decorators.abstractmethod
+    def set_draw_joint_mode(self, event: SetJointDrawModeEvent):
+        """
+        Sets the draw joint mode of the selected joints.
+
+        :param SetJointDrawModeEvent event: set joint draw mode event.
         """
 
         raise NotImplementedError

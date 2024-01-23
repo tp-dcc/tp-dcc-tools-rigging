@@ -38,6 +38,12 @@ class RotateLraEvent:
     orient_children: bool
 
 
+@dataclass
+class SetJointDrawModeEvent:
+    mode: consts.JointDrawMode
+    affect_children: bool
+
+
 class JointToolBox(tool.Tool):
 
     id = consts.TOOL_ID
@@ -51,6 +57,7 @@ class JointToolBox(tool.Tool):
     alignToParent = qt.Signal()
     zeroRotationAxis = qt.Signal(ZeroRotationAxisEvent)
     rotateLra = qt.Signal(RotateLraEvent)
+    setJointDrawMode = qt.Signal(SetJointDrawModeEvent)
 
     def __init__(self, factory: PluginFactory, tools_manager: ToolsManager):
         super().__init__(factory, tools_manager)
@@ -90,6 +97,7 @@ class JointToolBox(tool.Tool):
         self.alignToParent.connect(self._hook.align_to_parent)
         self.zeroRotationAxis.connect(self._hook.zero_rotation_axis)
         self.rotateLra.connect(self._hook.rotate_lra)
+        self.setJointDrawMode.connect(self._hook.set_draw_joint_mode)
 
     @override
     def contents(self) -> list[qt.QWidget]:
@@ -101,6 +109,13 @@ class JointToolBox(tool.Tool):
         self._main_widget.setup_signals()
 
         self.update_widgets_from_properties()
+
+    def reset_ui(self):
+        """
+        Resets UI state.
+        """
+
+        self.reset_properties(update_widgets=True)
 
     def align_joint(self, align_up: bool = True):
         """
@@ -185,12 +200,15 @@ class JointToolBox(tool.Tool):
 
         self.rotateLra.emit(event)
 
-    def reset_ui(self):
+    def draw_joint(self, mode: consts.JointDrawMode):
         """
-        Resets UI state.
+        Sets the joint draw visibility of the selected joints.
+
+        :param consts.JointDrawMode name of the draw mode: Mode to draw joint with.
         """
 
-        self.reset_properties(update_widgets=True)
+        event = SetJointDrawModeEvent(mode=mode, affect_children=bool(self.properties.affect_children.value))
+        self.setJointDrawMode.emit(event)
 
 
 class JointToolboxView(qt.QWidget):
@@ -220,6 +238,10 @@ class JointToolboxView(qt.QWidget):
         self._rotate_lra_negative_button: qt.BaseButton | None = None
         self._rotate_lra_positive_button: qt.BaseButton | None = None
         self._draw_style_widget: qt.QWidget | None = None
+        self._draw_bone_button: qt.LeftAlignedButton | None = None
+        self._draw_none_button: qt.LeftAlignedButton | None = None
+        self._draw_joint_button: qt.LeftAlignedButton | None = None
+        self._draw_multi_button: qt.LeftAlignedButton | None = None
         self._mirror_widget: qt.QWidget | None = None
         self._size_widget: qt.QWidget | None = None
 
@@ -299,6 +321,14 @@ class JointToolboxView(qt.QWidget):
 
         self._draw_style_widget = qt.QWidget(parent=self)
         self._accordion.add_item('Draw Style', self._draw_style_widget)
+        self._draw_bone_button = qt.left_aligned_button(
+            'Bone', icon='skeleton', tooltip=consts.DRAW_BONE_BUTTON_TOOLTIP, parent=self)
+        self._draw_none_button = qt.left_aligned_button(
+            'None', icon='skeleton_hide', tooltip=consts.DRAW_BONE_BUTTON_TOOLTIP, parent=self)
+        self._draw_joint_button = qt.left_aligned_button(
+            'Joint', icon='joint', tooltip=consts.DRAW_BONE_BUTTON_TOOLTIP, parent=self)
+        self._draw_multi_button = qt.left_aligned_button(
+            'Multi-Box', icon='cube_wire', tooltip=consts.DRAW_BONE_BUTTON_TOOLTIP, parent=self)
 
         self._mirror_widget = qt.QWidget(parent=self)
         self._accordion.add_item('Mirror', self._mirror_widget)
@@ -361,6 +391,12 @@ class JointToolboxView(qt.QWidget):
 
         draw_style_layout = qt.vertical_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
         self._draw_style_widget.setLayout(draw_style_layout)
+        draw_buttons_layout = qt.horizontal_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
+        draw_buttons_layout.addWidget(self._draw_bone_button)
+        draw_buttons_layout.addWidget(self._draw_none_button)
+        draw_buttons_layout.addWidget(self._draw_joint_button)
+        draw_buttons_layout.addWidget(self._draw_multi_button)
+        draw_style_layout.addLayout(draw_buttons_layout)
 
         mirror_layout = qt.vertical_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
         self._mirror_widget.setLayout(mirror_layout)
@@ -388,6 +424,7 @@ class JointToolboxView(qt.QWidget):
         Function that creates all the signal connections for all the widgets contained within this UI.
         """
 
+        self._reset_ui_button.clicked.connect(self.tool.reset_ui)
         self._primary_axis_combo.currentIndexChanged.connect(self._on_primary_axis_combo_current_index_changed)
         self._orient_y_pos_button.clicked.connect(partial(self.tool.align_joint, align_up=True))
         self._orient_y_neg_button.clicked.connect(partial(self.tool.align_joint, align_up=False))
@@ -397,7 +434,10 @@ class JointToolboxView(qt.QWidget):
         self._zero_rotation_axis_button.clicked.connect(self.tool.zero_rotation_axis)
         self._rotate_lra_negative_button.clicked.connect(partial(self.tool.rotate_lra, negative=True))
         self._rotate_lra_positive_button.clicked.connect(partial(self.tool.rotate_lra, negative=False))
-        self._reset_ui_button.clicked.connect(self.tool.reset_ui)
+        self._draw_bone_button.clicked.connect(partial(self.tool.draw_joint, mode=consts.JointDrawMode.Bone))
+        self._draw_none_button.clicked.connect(partial(self.tool.draw_joint, mode=consts.JointDrawMode.Hide))
+        self._draw_joint_button.clicked.connect(partial(self.tool.draw_joint, mode=consts.JointDrawMode.Joint))
+        self._draw_multi_button.clicked.connect(partial(self.tool.draw_joint, mode=consts.JointDrawMode.MultiBoxChild))
 
     def _on_primary_axis_combo_current_index_changed(self):
         """
