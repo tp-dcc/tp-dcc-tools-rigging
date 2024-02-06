@@ -1,14 +1,34 @@
 from __future__ import annotations
 
+import typing
+
 import maya.cmds as cmds
 import maya.api.OpenMaya as OpenMaya
 
 from tp.core import log
 from tp.maya import api
 from tp.commands import maya
+from tp.maya.meta import base
 from tp.maya.cmds.nodes import joints
 
 logger = log.rigLogger
+
+if typing.TYPE_CHECKING:
+    from tp.maya.meta.planeorient import PlaneOrientMeta
+
+
+def create_plane_orient(create_plane: bool = True) -> PlaneOrientMeta:
+
+    plane_orient_meta_nodes: list[PlaneOrientMeta] = base.find_meta_nodes_by_class_type('tpPlaneOrient')
+    if not plane_orient_meta_nodes:
+        plane_orient = maya.create_plane_orient()
+        plane_orient.create_reference_plane(create_plane=create_plane)
+    else:
+        plane_orient = plane_orient_meta_nodes[0]
+        if plane_orient.reference_plane() is None:
+            plane_orient.create_reference_plane(create_plane=create_plane)
+
+    return plane_orient
 
 
 def align_selected_joints(
@@ -94,3 +114,23 @@ def align_joints(
         pass
 
     return success
+
+
+def selected_joint_properties() -> tuple[float, float | None, bool | None]:
+    """
+    Returns the joint properties of the first selected joint.
+
+    :return: first selected joint properties.
+    :rtype: tuple[float, float or None, bool or None]
+    """
+
+    selected_joints = cmds.ls(selection=True, type='joint')
+    joint_global_scale = cmds.jointDisplayScale(query=True)
+    if not selected_joints:
+        return joint_global_scale, None, None
+
+    joint = selected_joints[0]
+    joint_local_radius = cmds.getAttr(f'{joint}.radius')
+    scale_compensate = cmds.getAttr(f'{joint}.segmentScaleCompensate')
+
+    return  joint_global_scale, joint_local_radius, scale_compensate

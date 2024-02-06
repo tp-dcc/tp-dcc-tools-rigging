@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import typing
 from functools import partial
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from overrides import override
 
 from tp.core import log, tool, dcc
 from tp.common.qt import api as qt
+from tp.dcc import scene
 
 from . import consts, hook
 
@@ -44,6 +45,71 @@ class SetJointDrawModeEvent:
     affect_children: bool
 
 
+@dataclass
+class SetLraVisibilityEvent:
+    visibility: bool
+    affect_children: bool
+
+
+@dataclass
+class SetPlaneOrientPositionSnapEvent:
+    enable: bool
+
+
+@dataclass
+class ValidateReferencePlaneEvent:
+    create_plane: bool
+    primary_axis: int | None = None
+    primary_negate_axis: int | None = None
+    secondary_axis: int | None = None
+
+
+@dataclass
+class SetStartEndNodesEvent:
+    success: bool = False
+
+
+@dataclass
+class UpdateJointsPropertiesEvent:
+    joint_global_scale: float | None = None
+    joint_local_radius: float | None = None
+    joint_scale_compensate: bool | None = None
+
+
+@dataclass
+class MirrorSelectedJointsEvent:
+    mirror_mode: int
+    mirror_axis: str
+    search_replace: tuple[list[str]] = field(default_factory=lambda: [['_L', '_R'], ['_lft', '_rgt']])
+
+
+@dataclass
+class JointScaleCompensateToggleEvent:
+    compensate: bool
+    affect_children: bool
+
+
+@dataclass
+class SetGlobalJointDisplaySizeEvent:
+    size: float
+
+
+@dataclass
+class SetJointRadiusEvent:
+    radius: float
+    affect_children: bool
+
+
+@dataclass
+class FreezeMatrixEvent:
+    affect_children: bool
+
+
+@dataclass
+class ResetMatrixEvent:
+    affect_children: bool
+
+
 class JointToolBox(tool.Tool):
 
     id = consts.TOOL_ID
@@ -51,6 +117,7 @@ class JointToolBox(tool.Tool):
     ui_data = tool.UiData(label='Joint Toolbox')
     tags = ['joint', 'toolbox']
 
+    setStartEndNodes = qt.Signal(SetStartEndNodesEvent)
     alignJoint = qt.Signal(AlignJointEvent)
     editLra = qt.Signal()
     exitLra = qt.Signal()
@@ -58,6 +125,15 @@ class JointToolBox(tool.Tool):
     zeroRotationAxis = qt.Signal(ZeroRotationAxisEvent)
     rotateLra = qt.Signal(RotateLraEvent)
     setJointDrawMode = qt.Signal(SetJointDrawModeEvent)
+    setLraVisibility = qt.Signal(SetLraVisibilityEvent)
+    setPlaneOrientPositionSnap = qt.Signal(SetPlaneOrientPositionSnapEvent)
+    updateJointsProperties = qt.Signal(UpdateJointsPropertiesEvent)
+    mirrorSelectedJoints = qt.Signal(MirrorSelectedJointsEvent)
+    jointScaleCompensate = qt.Signal(JointScaleCompensateToggleEvent)
+    setGlobalJointDisplaySize = qt.Signal(SetGlobalJointDisplaySizeEvent)
+    setJointRadius = qt.Signal(SetJointRadiusEvent)
+    freezeMatrix = qt.Signal(FreezeMatrixEvent)
+    resetMatrix = qt.Signal(ResetMatrixEvent)
 
     def __init__(self, factory: PluginFactory, tools_manager: ToolsManager):
         super().__init__(factory, tools_manager)
@@ -70,14 +146,16 @@ class JointToolBox(tool.Tool):
     def initialize_properties(self) -> list[tool.UiProperty]:
         return [
             tool.UiProperty(name='affect_children', value=1),
-            tool.UiProperty(name='global_display_size', value=1),
-            tool.UiProperty(name='joint_radius', value=1.0),
-            tool.UiProperty(name='mirror', value=0),
+            tool.UiProperty(name='mirror_mode', value=1),
+            tool.UiProperty(name='mirror_axis', value=0),
             tool.UiProperty(name='rotate_lra_axis', value=0),
             tool.UiProperty(name='rotate_lra', value=45.0),
             tool.UiProperty(name='world_up', value=1),
             tool.UiProperty(name='primary_axis', value=0),
             tool.UiProperty(name='secondary_axis', value=1),
+            tool.UiProperty(name='joint_scale_compensate_ratio', value=True),
+            tool.UiProperty(name='joint_global_display_size', value=1),
+            tool.UiProperty(name='joint_radius', value=1.0),
         ]
 
     @override
@@ -91,6 +169,8 @@ class JointToolBox(tool.Tool):
         else:
             self._hook = hook.JointToolboxHook()
 
+        self.closed.connect(self._hook.delete_plane_orient)
+        self.setStartEndNodes.connect(self._hook.set_start_end_nodes)
         self.alignJoint.connect(self._hook.align_joint)
         self.editLra.connect(self._hook.edit_lra)
         self.exitLra.connect(self._hook.exit_lra)
@@ -98,6 +178,15 @@ class JointToolBox(tool.Tool):
         self.zeroRotationAxis.connect(self._hook.zero_rotation_axis)
         self.rotateLra.connect(self._hook.rotate_lra)
         self.setJointDrawMode.connect(self._hook.set_draw_joint_mode)
+        self.setLraVisibility.connect(self._hook.set_lra_visibility)
+        self.setPlaneOrientPositionSnap.connect(self._hook.set_plane_orient_position_snap)
+        self.updateJointsProperties.connect(self._hook.update_joints_properties)
+        self.mirrorSelectedJoints.connect(self._hook.mirror_selected_joints)
+        self.jointScaleCompensate.connect(self._hook.joint_scale_compensate)
+        self.setGlobalJointDisplaySize.connect(self._hook.set_global_joint_display_size)
+        self.setJointRadius.connect(self._hook.set_joint_radius)
+        self.freezeMatrix.connect(self._hook.freeze_to_matrix)
+        self.resetMatrix.connect(self._hook.reset_matrix)
 
     @override
     def contents(self) -> list[qt.QWidget]:
@@ -106,6 +195,7 @@ class JointToolBox(tool.Tool):
 
     @override
     def post_content_setup(self):
+        self.update_joints_properties()
         self._main_widget.setup_signals()
 
         self.update_widgets_from_properties()
@@ -116,6 +206,53 @@ class JointToolBox(tool.Tool):
         """
 
         self.reset_properties(update_widgets=True)
+
+    def check_meta_nodes(self):
+        """Checks whether meta nodes for arrow and plane should exist. And create/delete them if necessary.
+        """
+
+        world_up = self.properties.world_up.value
+        if world_up > 2:
+            event = ValidateReferencePlaneEvent(create_plane=False if self.properties.world_up.value == 3 else True)
+            self._hook.validate_reference_plane(event)
+            self._hook.validate_meta_node(event)
+            if event.primary_axis is not None:
+                self.properties.primary_axis.value = event.primary_axis
+            if event.primary_negate_axis:
+                self.properties.primary_axis.value += 3
+            if event.secondary_axis is not None:
+                self.properties.secondary_axis.value = event.secondary_axis
+            self.update_widgets_from_properties()
+        else:
+            self.delete_reference_plane()
+
+    def delete_reference_plane(self):
+        """
+        Deletes if possible the reference plane/arrow from scene.
+        """
+
+        self._hook.delete_reference_plane()
+
+    def set_plane_orient_position_snap(self, flag):
+        """
+        Sets where plane orient position should be snapped.
+
+        :param bool flag: True to enable plane orient position snap; False to disable it.
+        """
+
+        event = SetPlaneOrientPositionSnapEvent(flag)
+        self.setPlaneOrientPositionSnap.emit(event)
+
+    def set_start_end_nodes(self):
+        """
+        Sets the start and end nodes.
+        """
+
+        event = SetStartEndNodesEvent()
+        self.setStartEndNodes.emit(event)
+        if not event.success:
+            event = ValidateReferencePlaneEvent(create_plane=False if self.properties.world_up.value == 3 else True)
+            self._hook.validate_meta_node(event)
 
     def align_joint(self, align_up: bool = True):
         """
@@ -210,6 +347,84 @@ class JointToolBox(tool.Tool):
         event = SetJointDrawModeEvent(mode=mode, affect_children=bool(self.properties.affect_children.value))
         self.setJointDrawMode.emit(event)
 
+    def set_lra_visibility(self, visibility: bool = True):
+        """
+        Shows/Hides the joints local rotation axis.
+
+        :param bool visibility: True to show local rotation axis manipulators; False to hidde them.
+        """
+
+        event = SetLraVisibilityEvent(visibility=visibility, affect_children=self.properties.affect_children.value)
+        self.setLraVisibility.emit(event)
+
+    def mirror_joint(self):
+        """
+        Mirror joint/s across a given plane.
+        """
+
+        event = MirrorSelectedJointsEvent(
+            mirror_mode=self.properties.mirror_mode.value,
+            mirror_axis={0: 'X', 1: 'Y', 2: 'Z'}[self.properties.mirror_axis.value])
+        self.mirrorSelectedJoints.emit(event)
+
+    def joint_scale_compensate(self):
+        """
+        Turns the segment scale compensate on/off for the selected joints.
+        """
+
+        event = JointScaleCompensateToggleEvent(
+            compensate=self.properties.joint_scale_compensate_ratio.value,
+            affect_children=self.properties.affect_children.value)
+        self.jointScaleCompensate.emit(event)
+
+    def display_joint_size(self):
+        """
+        Sets the global joint display size.
+        """
+
+        event = SetGlobalJointDisplaySizeEvent(size=self.properties.joint_global_display_size.value)
+        self.setGlobalJointDisplaySize.emit(event)
+
+    def set_joint_radius(self):
+        """
+        Sets the joint radius for selected joints
+        """
+
+        event = SetJointRadiusEvent(
+            radius=self.properties.joint_radius.value, affect_children=self.properties.affect_children.value)
+        self.setJointRadius.emit(event)
+
+    def freeze_to_matrix(self):
+        """
+        Sets an object translate and rotate to be zero and scale to be one.
+        """
+
+        event = FreezeMatrixEvent(affect_children=self.properties.affect_children.value)
+        self.freezeMatrix.emit(event)
+
+    def reset_matrix(self):
+        """
+        Reset an object offset matrix to be zero.
+        """
+
+        event = ResetMatrixEvent(affect_children=self.properties.affect_children.value)
+        self.resetMatrix.emit(event)
+
+    def update_joints_properties(self):
+        """
+        Updates tool model based on the first selected joint properties.
+        """
+
+        event = UpdateJointsPropertiesEvent()
+        self.updateJointsProperties.emit(event)
+        if event.joint_global_scale is not None:
+            self.properties.joint_global_display_size.value = event.joint_global_scale
+        if event.joint_local_radius is not None:
+            self.properties.joint_radius.value = event.joint_local_radius
+        if event.joint_scale_compensate is not None:
+            self.properties.joint_scale_compensate_ratio.value = event.joint_scale_compensate
+        self.update_widgets_from_properties()
+
 
 class JointToolboxView(qt.QWidget):
     def __init__(self, tool_instance: JointToolBox, parent: qt.QWidget | None = None):
@@ -242,12 +457,26 @@ class JointToolboxView(qt.QWidget):
         self._draw_none_button: qt.LeftAlignedButton | None = None
         self._draw_joint_button: qt.LeftAlignedButton | None = None
         self._draw_multi_button: qt.LeftAlignedButton | None = None
+        self._show_lra_button: qt.LeftAlignedButton | None = None
+        self._hide_lra_button: qt.LeftAlignedButton | None = None
         self._mirror_widget: qt.QWidget | None = None
+        self._mirror_behavior_radio: qt.RadioButtonGroup | None = None
+        self._mirror_combo: qt.ComboBoxRegularWidget | None = None
+        self._mirror_button: qt.LeftAlignedButton | None = None
         self._size_widget: qt.QWidget | None = None
+        self._scale_compensate_radio: qt.RadioButtonGroup | None = None
+        self._global_display_size_edit: qt.FloatLineEditWidget | None = None
+        self._joint_radius_edit: qt.FloatLineEditWidget | None = None
+        self._matrix_offsets_widget: qt.QWidget | None = None
+        self._freeze_offset_matrix_button: qt.LeftAlignedButton | None = None
+        self._reset_offset_matrix_button: qt.LeftAlignedButton | None = None
+        self._create_position_widget: qt.QWidget | None = None
 
         self.setup_widgets()
         self.setup_layouts()
         self.link_properties()
+
+        self._on_world_up_axis_combo_current_index_changed()
 
     @property
     def tool(self) -> JointToolBox:
@@ -259,6 +488,12 @@ class JointToolboxView(qt.QWidget):
         """
 
         return self._tool
+
+    @override
+    def enterEvent(self, event: qt.QEvent) -> None:
+        super().enterEvent(event)
+
+        self.tool.check_meta_nodes()
 
     def setup_widgets(self):
         """
@@ -329,12 +564,42 @@ class JointToolboxView(qt.QWidget):
             'Joint', icon='joint', tooltip=consts.DRAW_BONE_BUTTON_TOOLTIP, parent=self)
         self._draw_multi_button = qt.left_aligned_button(
             'Multi-Box', icon='cube_wire', tooltip=consts.DRAW_BONE_BUTTON_TOOLTIP, parent=self)
+        self._show_lra_button = qt.left_aligned_button(
+            'Show Local Rotation Axis', icon='axis', tooltip=consts.SHOW_LRA_BUTTON_TOOLTIP, parent=self)
+        self._hide_lra_button = qt.left_aligned_button(
+            'Hide Local Rotation Axis', icon='axis', tooltip=consts.HIDE_LRA_BUTTON_TOOLTIP, parent=self)
 
         self._mirror_widget = qt.QWidget(parent=self)
         self._accordion.add_item('Mirror', self._mirror_widget)
+        self._mirror_behavior_radio = qt.RadioButtonGroup(
+            radio_names=['Mirror Orientation', 'Mirror Behavior'], tooltips=consts.MIRROR_BEHAVIOR_RADIO_TOOLTIPS,
+            default=1, margins=(qt.consts.SPACING, 0, qt.consts.SPACING, qt.consts.SPACING), parent=self)
+        self._mirror_combo = qt.ComboBoxRegularWidget(
+            'Mirror Axis', items=consts.XYZ_LIST, tooltip=consts.MIRROR_COMBO_TOOLTIP, parent=self)
+        self._mirror_button = qt.left_aligned_button(
+            'Mirror', icon='mirror', tooltip=consts.MIRROR_BUTTON_TOOLTIP, parent=self)
 
         self._size_widget = qt.QWidget(parent=self)
         self._accordion.add_item('Size', self._size_widget)
+        self._scale_compensate_radio = qt.RadioButtonGroup(
+            radio_names=['Scale Compensate Off', 'Scale Compensate On'],
+            tooltips=consts.SCALE_COMPENSATE_RADIO_TOOLTIPS, default=1,
+            margins=(qt.consts.SPACING, qt.consts.SPACING, qt.consts.SPACING, qt.consts.SPACING), parent=self)
+        self._global_display_size_edit = qt.FloatLineEditWidget(
+            'Scene Joint Size', tooltip=consts.SCENE_JOINT_SIZE_TOOLTIP, parent=self)
+        self._joint_radius_edit = qt.FloatLineEditWidget(
+            'Local Joint Radius', tooltip=consts.JOINT_RADIUS_EDIT_TOOLTIP, parent=self)
+
+        self._matrix_offsets_widget = qt.QWidget(parent=self)
+        self._accordion.add_item('Matrix & Offset', self._matrix_offsets_widget)
+        self._freeze_offset_matrix_button = qt.left_aligned_button(
+            'Freeze To Offset Matrix', icon='matrix', tooltip=consts.FREEZE_TO_OFFSET_MATRIX_BUTTON_TOOLTIP,
+            parent=self)
+        self._reset_offset_matrix_button = qt.left_aligned_button(
+            'Unfreeze Offset Matrix', icon='matrix', tooltip=consts.RESET_OFFSET_MATRIX_BUTTON_TOOLTIP, parent=self)
+
+        self._create_position_widget = qt.QWidget(parent=self)
+        self._accordion.add_item('Create & Position', self._create_position_widget)
 
     def setup_layouts(self):
         """
@@ -396,13 +661,33 @@ class JointToolboxView(qt.QWidget):
         draw_buttons_layout.addWidget(self._draw_none_button)
         draw_buttons_layout.addWidget(self._draw_joint_button)
         draw_buttons_layout.addWidget(self._draw_multi_button)
+        display_lra_layout = qt.horizontal_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
+        display_lra_layout.addWidget(self._show_lra_button)
+        display_lra_layout.addWidget(self._hide_lra_button)
         draw_style_layout.addLayout(draw_buttons_layout)
+        draw_style_layout.addLayout(display_lra_layout)
 
         mirror_layout = qt.vertical_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
+        mirror_bottom_layout = qt.horizontal_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
+        mirror_bottom_layout.addWidget(self._mirror_combo, 1)
+        mirror_bottom_layout.addWidget(self._mirror_button, 1)
+        mirror_layout.addWidget(self._mirror_behavior_radio)
+        mirror_layout.addLayout(mirror_bottom_layout)
         self._mirror_widget.setLayout(mirror_layout)
 
         size_layout = qt.vertical_layout(margins=(0, 0, 0, 0), spacing=qt.consts.SPACING)
+        size_bottom_layout = qt.horizontal_layout(
+            margins=(0, 0, 0, qt.consts.DEFAULT_SPACING), spacing=qt.consts.SUPER_LARGE_SPACING)
+        size_bottom_layout.addWidget(self._global_display_size_edit, 1)
+        size_bottom_layout.addWidget(self._joint_radius_edit, 1)
+        size_layout.addWidget(self._scale_compensate_radio)
+        size_layout.addLayout(size_bottom_layout)
         self._size_widget.setLayout(size_layout)
+
+        matrix_layout = qt.horizontal_layout(margins=(0, 0, 0, qt.consts.DEFAULT_SPACING), spacing=qt.consts.SPACING)
+        matrix_layout.addWidget(self._freeze_offset_matrix_button)
+        matrix_layout.addWidget(self._reset_offset_matrix_button)
+        self._matrix_offsets_widget.setLayout(matrix_layout)
 
         contents_layout.addLayout(select_layout)
         contents_layout.addWidget(self._accordion)
@@ -418,14 +703,22 @@ class JointToolboxView(qt.QWidget):
         self.tool.link_property(self._world_up_axis_combo, 'world_up')
         self.tool.link_property(self._rotate_axis_lra_combo, 'rotate_lra_axis')
         self.tool.link_property(self._rotate_lra_line, 'rotate_lra')
+        self.tool.link_property(self._mirror_behavior_radio, 'mirror_mode')
+        self.tool.link_property(self._mirror_combo, 'mirror_axis')
+        self.tool.link_property(self._scale_compensate_radio, 'joint_scale_compensate_ratio')
+        self.tool.link_property(self._global_display_size_edit, 'joint_global_display_size')
+        self.tool.link_property(self._joint_radius_edit, 'joint_radius')
 
     def setup_signals(self):
         """
         Function that creates all the signal connections for all the widgets contained within this UI.
         """
 
-        self._reset_ui_button.clicked.connect(self.tool.reset_ui)
+        self._reset_ui_button.clicked.connect(self._on_reset_ui_button_clicked)
         self._primary_axis_combo.currentIndexChanged.connect(self._on_primary_axis_combo_current_index_changed)
+        self._secondary_axis_combo.currentIndexChanged.connect(self._on_secondary_axis_combo_current_index_changed)
+        self._world_up_axis_combo.currentIndexChanged.connect(self._on_world_up_axis_combo_current_index_changed)
+        self._start_end_arrow_chain_button.clicked.connect(self.tool.set_start_end_nodes)
         self._orient_y_pos_button.clicked.connect(partial(self.tool.align_joint, align_up=True))
         self._orient_y_neg_button.clicked.connect(partial(self.tool.align_joint, align_up=False))
         self._edit_lra_button.clicked.connect(self.tool.edit_lra)
@@ -438,6 +731,38 @@ class JointToolboxView(qt.QWidget):
         self._draw_none_button.clicked.connect(partial(self.tool.draw_joint, mode=consts.JointDrawMode.Hide))
         self._draw_joint_button.clicked.connect(partial(self.tool.draw_joint, mode=consts.JointDrawMode.Joint))
         self._draw_multi_button.clicked.connect(partial(self.tool.draw_joint, mode=consts.JointDrawMode.MultiBoxChild))
+        self._show_lra_button.clicked.connect(partial(self.tool.set_lra_visibility, visibility=True))
+        self._hide_lra_button.clicked.connect(partial(self.tool.set_lra_visibility, visibility=False))
+        self._mirror_button.clicked.connect(self.tool.mirror_joint)
+        self._scale_compensate_radio.toggled.connect(self.tool.joint_scale_compensate)
+        self._global_display_size_edit.textModified.connect(self.tool.display_joint_size)
+        self._joint_radius_edit.textModified.connect(self.tool.set_joint_radius)
+        self._freeze_offset_matrix_button.clicked.connect(self.tool.freeze_to_matrix)
+        self._reset_offset_matrix_button.clicked.connect(self.tool.reset_matrix)
+
+        self.tool.callbacks.add_selection_changed_callback(self._on_selection_changed_callback)
+
+    def _update_orient_buttons(self):
+        """
+        Internal function that updates orient Y position and Y negative buttons text based on current tool properties.
+        """
+
+        self._orient_y_pos_button.setText(
+            f'Orient Roll +{consts.XYZ_LIST[self.tool.properties.secondary_axis.value]} '
+            f'(Aim {consts.XYZ_WITH_NEG_LIST[self.tool.properties.primary_axis.value]})')
+        self._orient_y_pos_button.setText(
+            f'Orient Roll -{consts.XYZ_LIST[self.tool.properties.secondary_axis.value]} '
+            f'(Aim {consts.XYZ_WITH_NEG_LIST[self.tool.properties.primary_axis.value]})')
+
+    def _on_reset_ui_button_clicked(self):
+        """
+        Internal callback function that is called each time Reset UI button is clicked by the user.
+        """
+
+        self.tool.reset_ui()
+
+        # Force the deletion of plane/arrow orient meta nodes and hides arrow/plane buttons.
+        self._on_world_up_axis_combo_current_index_changed()
 
     def _on_primary_axis_combo_current_index_changed(self):
         """
@@ -452,6 +777,69 @@ class JointToolboxView(qt.QWidget):
             else:
                 self.tool.properties.secondary_axis.value = 1      # If Z or X, make Y
 
-        self.tool.properties.rotate.value = aim_index
+        self.tool.properties.rotate_lra_axis.value = aim_index
 
         self.tool.update_widgets_from_properties()
+        self._update_orient_buttons()
+
+    def _on_secondary_axis_combo_current_index_changed(self):
+        """
+        Internal callback function that is called each time secondary axis combo box index is changed by the user.
+        """
+
+        aim_index = self.tool.properties.primary_axis.value
+        roll_up_index = self.tool.properties.secondary_axis.value
+        if aim_index == roll_up_index:
+            if roll_up_index == 0:
+                self.tool.properties.primary_axis.value = 2              # If X, make Z
+                self.tool.properties.rotate_lra_axis.value = 2           # Set rotate to the roll up to match.
+            else:
+                self.tool.properties.primary_axis.value = 0              # If Z or Y, make X
+                self.tool.properties.rotate_lra_axis.value = 0           # Set rotate to the roll up to match.
+
+        self.tool.update_widgets_from_properties()
+        self._update_orient_buttons()
+
+    def _on_world_up_axis_combo_current_index_changed(self):
+        """Internal callback function that is called each time world up axis combo box index is changed by the user.
+
+        Shows the visibility of the arrow and plane buttons and handles the showing or deletion of the plane/arrow meta
+        nodes.
+        """
+
+        world_up = self.tool.properties.world_up.value
+        if world_up <= 2:
+            arrow_visibility = False
+            plane_visibility = False
+            either = False
+        elif world_up == 3:
+            arrow_visibility = True
+            plane_visibility = False
+            either = True
+        else:
+            arrow_visibility = False
+            plane_visibility = True
+            either = True
+
+        self._select_plane_arrow_ctrl_button.setVisible(either)
+        self._start_end_arrow_chain_button.setVisible(arrow_visibility)
+        self._start_end_chain_button.setVisible(plane_visibility)
+
+        self.tool.delete_reference_plane()
+        self.tool.check_meta_nodes()
+
+        if plane_visibility:
+            self.tool.set_plane_orient_position_snap(True)
+        elif arrow_visibility:
+            self.tool.set_plane_orient_position_snap(False)
+
+    def _on_selection_changed_callback(self, *args, **kwargs):
+        """
+        Internal callback function that is called each time scene selection changes.
+        """
+
+        selection = scene.FnScene().active_selection()
+        if not selection:
+            return
+
+        self.tool.update_joints_properties()

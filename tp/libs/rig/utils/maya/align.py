@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import List, Iterator
 
 from tp.maya import api
@@ -168,3 +169,27 @@ def orient_nodes(
 			joints.append(current_node)
 		else:
 			current_node.setRotation(rotation, space=api.kWorldSpace)
+
+
+def world_axis_to_rotation(
+		axis: int, invert: bool = False, rotation_order: int = api.consts.kRotateOrder_XYZ) -> api.EulerRotation:
+	"""
+	From given world axis, returns the world rotation to align to that axis.
+
+	:param int axis: axis index to align to.
+	:param bool invert: whether to invert the rotation.
+	:param int rotation_order: rotation order to use.
+	:return: world rotation to align to the axis.
+	:rtype: api.EulerRotation
+	"""
+
+	normal_direction = api.Vector()
+	degree_90 = math.pi * 0.5
+	if axis == mathlib.X_AXIS_INDEX:
+		normal_direction[2] = -degree_90 if not invert else degree_90
+	elif axis == mathlib.Y_AXIS_INDEX and invert:
+		normal_direction[0] = math.pi
+	elif axis == mathlib.Z_AXIS_INDEX:
+		normal_direction[0] = degree_90 if not invert else -degree_90
+
+	return api.EulerRotation(normal_direction, rotation_order)

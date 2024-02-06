@@ -93,3 +93,35 @@ Joints will be visualized with no connections between joints."""
 DRAW_MULTI_CHILD_BOX_BUTTON_TOOLTIP = """
 Set 'Draw Style' joint attribute to be 'Multi-Child Box'.
 Joints with multiple children will be visualized as `boxes`, otherwise as `bones`."""
+SHOW_LRA_BUTTON_TOOLTIP = """
+Show the local rotation axis on the selected joint/s.
+The rotation axis helps visualize joint orientation."""
+HIDE_LRA_BUTTON_TOOLTIP = """
+Hide the local rotation axis on the selected joint/s."""
+MIRROR_BEHAVIOR_RADIO_TOOLTIPS = [
+    """Joint orients are maintained relative to the joints on the mirror.
+    This mode can be used for IK legs or joints that need to rotate without mirrored behavior.
+    This is not the default behavior.""",
+    """Mirror will flip the `aim axis` causing rotation in `object mode` to be mirrored.
+    This is the mode usually used by mots joint and it is the default behavior."""
+]
+MIRROR_COMBO_TOOLTIP = """
+Set the mirror axis to mirror across ('X', 'Y' or 'Z')."""
+MIRROR_BUTTON_TOOLTIP = """
+Mirror the joints. Select only the base of each joint to mirror."""
+SCALE_COMPENSATE_RADIO_TOOLTIPS = [
+    """Child joints will scale with the parent. This is not the default behavior.""",
+    """Child joints will not scale with the parent. This is the default behavior"""
+]
+SCENE_JOINT_SIZE_TOOLTIP = """Set the global joint display size, all joints in the scene are affected."""
+JOINT_RADIUS_EDIT_TOOLTIP = """Set the joint radius (display size) of the selected joints."""
+FREEZE_TO_OFFSET_MATRIX_BUTTON_TOOLTIP = """
+Freeze to Parent Offset Matrix.
+Useful for zeroing joints without need to group them.
+    1. Sets an object's `translate`, `rotate` to zero and `scale` to one.
+    2. Transfers `translate`, `rotate` and `scale` information to the `offsetParentMatrix`.
+Can be non-uniform issues with rotations after freezing."""
+RESET_OFFSET_MATRIX_BUTTON_TOOLTIP = """
+Reset an object Offset Matrix to zero.
+Returns joints to normal state if the `Freeze To Offset Matrix` has been used.
+Maintains the objects `translate`, `rotate` and scale position."""
